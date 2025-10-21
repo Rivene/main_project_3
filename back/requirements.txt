@@ -1,0 +1,17 @@
+fastapi>=0.110
+uvicorn[standard]>=0.23
+pydantic>=2.4
+pydantic-settings>=2.2
+python-multipart>=0.0.9
+requests>=2.31
+PyPDF2>=3.0
+
+# Optional (used at OCR runtime via subprocess script)
+# opencv-python>=4.9
+# numpy>=1.26
+# PyMuPDF>=1.23
+# pillow>=10.0
+# pytesseract>=0.3.10
+
+# Optional (database)
+# oracledb>=2.0

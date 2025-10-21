@@ -1,0 +1,107 @@
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import Optional
+
+from back.settings import settings
+from back.infrastructure.db.oracle_repo import OracleRepo
+# ?ë³¸ ?Œì´?„ë¼??ì§ì ‘ ?¸ì¶œ (ë³€ê²??†ìŒ)
+from back.ocr.tesseract_runner import run_tesseract_pipeline
+from back.llm.ollama_client import summarize as summarize_text
+
+
+@dataclass
+class OcrResultPaths:
+    text_path: str
+    json_path: str
+    merged_pdf_path: str
+    llm_json_path: Optional[str] = None
+
+
+def process_ocr(
+    *,
+    file_path: str,
+    file_id: str,
+    filename: str,
+    dpi: int,
+    prep: str,
+    langs: str,
+    psm: int,
+    do_summary: bool,
+    llm_model: str,
+    category_id: Optional[int],
+    category_name: Optional[str],
+    fs,
+):
+    """
+    ?ë³¸ ë¡œì§ ? ì?:
+    - run_tesseract_pipeline(file_path, dpi, prep, langs, psm) ?¸ì¶œ
+    - (?µì…˜) summarize_text() ?¤í–‰
+    - ?Œì¼ ?€?¥ì? LocalFS ?œìš©
+    - OracleRepo.save_document() ?¸ì¶œ (?ë³¸ ë©”ì„œ???œê·¸?ˆì²˜ ê·¸ë?ë¡?
+    """
+    # OCR
+    # ì£¼ì˜: ?ë³¸ ?¨ìˆ˜ ?œê·¸?ˆì²˜ë¥?ê·¸ë?ë¡??°ë¦„
+    ocr_out = run_tesseract_pipeline(
+        pdf_path=file_path,
+        dpi=dpi,
+        prep=prep,
+        langs=langs,
+        psm=psm,
+    )
+    # ocr_out?€ ?ë³¸ ?¨ìˆ˜ ë°˜í™˜ ?•ì‹??ë§ì¶° ?¬ìš© (?ìŠ¤??JSON/ë³‘í•©PDF ??
+
+    # ?€??ê²½ë¡œ ì¤€ë¹?    fs.ensure_result_dirs(file_id)
+    text_path = fs.write_text(file_id, "ocr.txt", ocr_out.get("text", ""))
+    json_path = fs.write_json(file_id, "ocr.json", ocr_out.get("json", {}))
+    merged_pdf_path = fs.copy_merged_pdf(file_id, ocr_out.get("merged_pdf"))
+
+    llm_summary_text = None
+    llm_json_path = None
+
+    if do_summary:
+        llm_summary_text = summarize_text(
+            ocr_out.get("text", ""),
+            model=llm_model or settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE,
+        )
+        llm_json_path = fs.write_json(
+            file_id, "llm.json", {"model": llm_model, "summary": llm_summary_text}
+        )
+
+    # DB ?€??(?ë³¸ OracleRepo ?¸ì¶œ ?œê·¸?ˆì²˜ ê·¸ë?ë¡?
+    try:
+        repo = OracleRepo()
+        repo.save_document(
+            server_file_id=file_id,
+            filename=filename,
+            title=filename,
+            size_bytes=len(ocr_out.get("text", "").encode("utf-8")),
+            summary_text=llm_summary_text,
+        )
+    except Exception:
+        # DB ?°ê²° ???˜ì–´???„ì²´ ?Œì´?„ë¼???¤íŒ¨?œí‚¤ì§€ ?ŠìŒ (?ë³¸ ê´€??? ì?)
+        pass
+
+    return {
+        "file_id": file_id,
+        "filename": filename,
+        "dpi": dpi,
+        "prep": prep,
+        "langs": langs,
+        "psm": psm,
+        "ocr": {
+            "text_rel": f"{file_id}/ocr.txt",
+            "json_rel": f"{file_id}/ocr.json",
+            "merged_pdf_rel": f"{file_id}/merged.pdf" if merged_pdf_path else None,
+        },
+        "llm": {
+            "model": llm_model,
+            "summary_text": llm_summary_text,
+            "json_rel": f"{file_id}/llm.json" if llm_json_path else None,
+        },
+        "category": {
+            "id": category_id,
+            "name": category_name,
+        },
+    }
+
