@@ -10,8 +10,19 @@ import {
 } from '../utils/uploadHelpers';
 import '../styles/upload.css';
 
+function stem(name='') {
+  const i = name.lastIndexOf('.');
+  return i > 0 ? name.slice(0, i) : name;
+}
+function topFolderOf(relPath='') {
+  // "folderA/sub/file.pdf" -> "folderA"
+  if (!relPath) return '';
+  const parts = relPath.split('/').filter(Boolean);
+  return parts.length ? parts[0] : '';
+}
+
 export default function UploadPage() {
-  const [items, setItems] = useState([]); // {id, file, status, progress, error, controller, result}
+  const [items, setItems] = useState([]); // {id, file, status, progress, error, controller, result, categoryName, title}
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
   const dirInputRef = useRef(null);
@@ -24,6 +35,7 @@ export default function UploadPage() {
   useEffect(() => {
     const el = dirInputRef.current;
     if (el) {
+      // 폴더 선택 가능
       el.setAttribute('webkitdirectory', '');
       el.setAttribute('directory', '');
       el.setAttribute('mozdirectory', '');
@@ -58,28 +70,39 @@ export default function UploadPage() {
         if (seenPrev.has(key)) continue;
 
         const err = validate(file);
+
+        //  기본 카테고리/제목 추론
+        const defaultCat = topFolderOf(rel) || 'Uncategorized';
+        const defaultTitle = stem(file.name);
+
         toAdd.push({
           id: crypto.randomUUID(),
-          file, status: err ? 'error' : 'idle', progress: 0,
-          error: err, controller: null, result: null,
+          file,
+          status: err ? 'error' : 'idle',
+          progress: 0,
+          error: err,
+          controller: null,
+          result: null,
+          categoryName: defaultCat,
+          title: defaultTitle,
         });
       }
       return toAdd.length ? [...toAdd, ...prev] : prev;
     });
   }, []);
 
-  // 드래그&드롭: 폴더 재귀는 기존 함수 그대로 써도 됨 (여기선 간소화)
+  // 드래그&드롭
   const onDrop = async (e) => {
     e.preventDefault();
     setDragOver(false);
     try {
-        const files = await extractFilesFromDataTransfer(e.dataTransfer);
-        // 폴더째 드롭해도 내부 pdf만 들어오게 됨
-        if (files?.length) addFiles(files);
+      const files = await extractFilesFromDataTransfer(e.dataTransfer);
+      // 폴더째 드롭해도 내부 pdf만 들어오게 됨
+      if (files?.length) addFiles(files);
     } catch (err) {
-        console.error(err);
+      console.error(err);
     }
-    };
+  };
 
   const onStartAll = useCallback(async () => {
     const queue = items.filter(it => it.status === 'idle').map(it => it.id);
@@ -102,18 +125,33 @@ export default function UploadPage() {
     const controller = new AbortController();
     setItems(prev => prev.map(it => it.id === id ? { ...it, status: 'uploading', progress: 0, controller } : it));
     try {
+      // 서버로 카테고리/제목 함께 전송
       const ocrRes = await ocrFile({
         file: cur.file,
-        params: { dpi: 300, prep: 'adaptive', langs: 'kor+eng', psm: 6, do_llm_summary: true, llm_model: 'gemma3-summarizer' },
+        params: {
+          dpi: 300,
+          prep: 'adaptive',
+          langs: 'kor+eng',
+          psm: 6,
+          do_llm_summary: true,
+          llm_model: 'gemma3-summarizer',
+          category_name: cur.categoryName || 'Uncategorized',
+          title_override: cur.title || stem(cur.file?.name || '')
+        },
         signal: controller.signal,
       });
+
       const serverFileId = extractServerFileId(ocrRes);
       const summary = ocrRes?.llmSummary || "";
       let tags = parseCategoriesFromSummary(summary);
       if (tags.length === 0) tags = categorize(summary || JSON.stringify(ocrRes || {}));
 
       setItems(prev => prev.map(it => it.id === id ? ({
-        ...it, status: 'done', progress: 100, controller: null, result: { ocr: ocrRes, serverFileId, summary, tags }
+        ...it,
+        status: 'done',
+        progress: 100,
+        controller: null,
+        result: { ocr: ocrRes, serverFileId, summary, tags }
       }) : it));
     } catch (err) {
       setItems(prev => prev.map(it => it.id === id ? ({ ...it, status: 'error', controller: null, error: err.message }) : it));
@@ -134,7 +172,11 @@ export default function UploadPage() {
   // 검색/필터
   const allCategories = useMemo(() => {
     const s = new Set();
-    for (const it of items) (it?.result?.tags || []).forEach(t => s.add(t));
+    // 결과 태그 + 사용자가 지정한 categoryName 모두 포함
+    for (const it of items) {
+      if (it.categoryName) s.add(it.categoryName);
+      (it?.result?.tags || []).forEach(t => s.add(t));
+    }
     return Array.from(s).sort();
   }, [items]);
 
@@ -148,21 +190,28 @@ export default function UploadPage() {
     const q = normalized(searchQuery);
     const need = Array.from(selectedCats);
     return items.filter(it => {
-      const tags = it?.result?.tags || [];
+      const tags = [...(it?.result?.tags || []), it.categoryName].filter(Boolean);
       if (!need.every(c => tags.includes(c))) return false;
       if (!q) return true;
-      const hay = [it.file?.name || '', it?.result?.summary || '', tags.join(' ')].map(normalized).join(' ');
+      const hay = [
+        it.file?.name || '',
+        it?.result?.summary || '',
+        tags.join(' '),
+        it.title || ''
+      ].map(normalized).join(' ');
       return hay.includes(q);
     });
   }, [items, searchQuery, selectedCats]);
 
   const onItemTagClick = (tag) => { setActiveTab('search'); toggleCat(tag); };
 
-  // 파일 선택 input 연결 (Home 내부 버튼에서 클릭만 함)
+  // 파일 선택 input 연결
   useEffect(() => {
     const input = inputRef.current;
     const dir = dirInputRef.current;
-    const handler = (e) => { if (e.target.files?.length) { addFiles(e.target.files); e.target.value = ''; } };
+    const handler = (e) => {
+      if (e.target.files?.length) { addFiles(e.target.files); e.target.value = ''; }
+    };
     input?.addEventListener('change', handler);
     dir?.addEventListener('change', handler);
     return () => {
@@ -206,7 +255,7 @@ export default function UploadPage() {
             acceptAttr={acceptAttr}
           />
         ) : (
-          <DbSearchPane 
+          <DbSearchPane
             items={items}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}

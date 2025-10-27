@@ -32,6 +32,8 @@ export function parseCategoriesFromSummary(summary = "") {
   let parts = rhs.split(/[,\|/·•>]+/).map(s => s.trim()).filter(Boolean);
   return Array.from(new Set(parts)).slice(0, 8);
 }
+
+// 요약문이 없거나 카테고리: 라인이 없는 경우
 export function categorize(text="") {
   const cats = new Set(), add=(c)=>cats.add(c);
   if (/(법률|심사보고|의결|위원회|법안|국회)/i.test(text)) add("법률/행정");

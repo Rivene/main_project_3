@@ -1,5 +1,6 @@
 // .env: VITE_API_BASE=http://127.0.0.1:4000
 const API_BASE = import.meta.env?.VITE_API_BASE || "http://127.0.0.1:4000";
+const url = (p) => (p.startsWith("http") ? p : API_BASE + p);
 
 // =========================
 //  URL 정규화 & 유틸
@@ -266,18 +267,102 @@ export async function fetchOcrText(fileId) {
   return await r.text();
 }
 
-// 이미 있을 api.js에 추가
-export async function searchDocuments({ q = "", categories = [], page = 1, pageSize = 20 } = {}) {
-  const API_BASE = import.meta.env?.VITE_API_BASE || "http://127.0.0.1:4000";
-  const url = new URL(`${API_BASE}/docs/search`);
-  if (q) url.searchParams.set("q", q);
-  if (categories?.length) url.searchParams.set("categories", categories.join(","));
-  url.searchParams.set("page", page);
-  url.searchParams.set("pageSize", pageSize);
+export async function uploadPdfToOCR({
+  file,                   // File 객체 (또는 null)
+  pdfPath,                // 서버 경로로 직접 지정시 (선택)
+  dpi = 300,
+  prep = "adaptive",
+  langs = "kor+eng",
+  psm = 6,
+  doLLMSummary = false,
+  llmModel = "gemma3-summarizer",
+  categoryName,           // ← 추가
+  titleOverride           // ← 추가
+}) {
+  const fd = new FormData();
+  if (file) fd.append("file", file);
+  if (pdfPath) fd.append("pdf_path", pdfPath);
 
-  const r = await fetch(url.toString(), { headers: { Accept: "application/json" } });
-  if (!r.ok) throw new Error(`검색 실패 (${r.status})`);
-  // 기대 응답 형식:
-  // { items: [{ id, title, filename, size, tags, summary, serverFileId, createdAt }], total, categories }
-  return r.json();
+  fd.append("dpi", String(dpi));
+  fd.append("prep", prep);
+  fd.append("langs", langs);
+  fd.append("psm", String(psm));
+  fd.append("do_llm_summary", String(!!doLLMSummary));
+  fd.append("llm_model", llmModel);
+
+  if (categoryName)  fd.append("category_name", categoryName);
+  if (titleOverride) fd.append("title_override", titleOverride);
+
+  const res = await fetch(url("/ocr/tesseract"), { method: "POST", body: fd });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+
+// 문서검색 비동기 함수 
+export async function searchDocuments({ q = "", categories = [], page = 1, pageSize = 20 }) {
+  const u = new URL(`${API_BASE}/search/documents`);
+  if (q) u.searchParams.set("q", q);
+  u.searchParams.set("page", String(page));
+  u.searchParams.set("pageSize", String(pageSize));
+  (categories || []).forEach((c) => u.searchParams.append("category", c));
+
+  try {
+    const res = await fetch(u.toString(), {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "");
+      throw new Error(`검색 실패 (${res.status}) ${msg}`);
+    }
+    return await res.json(); 
+  } catch (err) {
+    throw new Error(err?.message || "Failed to fetch");
+  }
+}
+
+export async function getCategories() {
+  const res = await fetch(`${API_BASE}/search/categories`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => "");
+    throw new Error(`카테고리 조회 실패 (${res.status}) ${msg}`);
+  }
+  const data = await res.json();
+
+  const pairs = Array.isArray(data?.categories) ? data.categories : [];
+  const mains = Array.isArray(data?.mains) ? data.mains : [];
+
+  // '주/부' 결합형 라벨들 (UI 칩/폴백용)
+  const joined = pairs
+    .map((p) => p?.catPath || [p?.main, p?.sub].filter(Boolean).join("/"))
+    .filter(Boolean);
+
+  // 트리: main -> [subs...]
+  const tree = pairs.reduce((acc, p) => {
+    const m = p?.main;
+    const s = p?.sub;
+    if (!m || !s) return acc;
+    if (!acc[m]) acc[m] = new Set();
+    acc[m].add(s);
+    return acc;
+  }, {});
+  // Set -> 정렬된 배열로 변환
+  Object.keys(tree).forEach((m) => {
+    tree[m] = Array.from(tree[m]).sort();
+  });
+
+  return {
+    raw: data,         // 원본 응답
+    categories: pairs, // [{ main, sub, catPath, cnt }]
+    mains,             // ["교육", "법률", ...]
+    joined,            // ["교육/법률제도", ...]
+    tree,              // { "교육": ["법률제도", ...], ... }
+  };
 }

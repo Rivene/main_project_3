@@ -479,3 +479,44 @@ body{ background:var(--bg); color:var(--text); line-height:1.55 }
 
 /* 메인 영역 */
 .u-main { padding: 24px; transition: padding .25s ease; }
+
+.cat-chip { display:inline-flex; gap:4px; align-items:center; }
+.cat-main { font-weight:600; }
+.cat-sub  { opacity:0.85; }
+.cat-sep  { opacity:0.5; }
+
+
+.u-bottom-section {
+  margin-top: auto;
+  padding: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.u-login-btn {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(to right, #FF54A1, #B862FF);
+  color: #fff;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 10px;
+  transition: 0.2s ease-in-out;
+}
+
+.u-login-btn:hover {
+  opacity: 0.9;
+}
+
+.u-login-icon {
+  font-size: 16px;
+}
+
+.u-login-text {
+  font-weight: 600;
+}

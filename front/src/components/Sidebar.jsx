@@ -1,18 +1,41 @@
+import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 export default function Sidebar({
   activeTab, setActiveTab,
-  categories, selectedCats, toggleCat,
-  collapsed, setCollapsed, 
+  categories = [], selectedCats, toggleCat,
+  collapsed, setCollapsed,
 }) {
+  const navigate = useNavigate();
+
+  // --- 카테고리 필터 ---
+  const pureCats = useMemo(() => {
+    const isCategoryLike = (s) => {
+      if (!s || typeof s !== 'string') return false;
+      const t = s.trim();
+      if (/[[(\]]/.test(t)) return false;
+      if (/\d{4,}/.test(t)) return false;
+      if (/\.(pdf|hwp|hwpx|docx?)$/i.test(t)) return false;
+      if (/https?:\/\//i.test(t)) return false;
+      if (t.length > 24) return false;
+      return true;
+    };
+    return Array.from(new Set(categories.filter(isCategoryLike))).slice(0, 30);
+  }, [categories]);
+
+  // --- 로그인 버튼 클릭 ---
+  const goToLogin = () => {
+    navigate('/member/login');
+  };
+
   return (
     <aside className={`u-sidebar ${collapsed ? 'collapsed' : ''}`} aria-label="전역 탐색">
       <div className="u-toprow">
         <div className="u-logo">
           <span className="u-logo-mark">📄 </span>
-          {/* 접힘 시 텍스트 숨김 */}
           <span className="u-logo-text">PDF Brief</span>
         </div>
 
-        {/*  삼지창(햄버거) 버튼 */}
         <button
           className="u-burger"
           type="button"
@@ -20,7 +43,6 @@ export default function Sidebar({
           title={collapsed ? '펼치기' : '접기'}
           onClick={() => setCollapsed(!collapsed)}
         >
-          {/* 삼지창 모양: ☰ (또는 ≡) */}
           ☰
         </button>
       </div>
@@ -46,11 +68,11 @@ export default function Sidebar({
         </button>
       </nav>
 
-      {categories.length > 0 && (
+      {pureCats.length > 0 && (
         <div className="u-side-cats">
-          <div className="u-side-title">카테고리</div>
+          <div className="u-side-title">최근 카테고리</div>
           <div className="u-side-chipbox">
-            {categories.map((c) => (
+            {pureCats.map((c) => (
               <button
                 key={c}
                 className={`chip small ${selectedCats.has(c) ? 'chip-on' : ''}`}
@@ -63,6 +85,18 @@ export default function Sidebar({
           </div>
         </div>
       )}
+
+      {/* 로그인 버튼 추가 */}
+      <div className="u-bottom-section">
+        <button
+          className="u-login-btn"
+          onClick={goToLogin}
+          title="로그인 페이지로 이동"
+        >
+          <span className="u-login-icon">🔐</span>
+          {!collapsed && <span className="u-login-text">로그인</span>}
+        </button>
+      </div>
     </aside>
   );
 }

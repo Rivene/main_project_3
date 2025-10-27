@@ -25,7 +25,8 @@ export default function UploadHome({
             <button className="u-btn ghost" type="button" onClick={() => inputRef.current?.click()}>파일 선택</button>
             <button className="u-btn ghost" type="button" onClick={() => dirInputRef.current?.click()}>폴더 선택</button>
           </div>
-          <input ref={inputRef} type="file" accept={acceptAttr} multiple style={{ display: 'none' }} />
+          <input ref={dirInputRef} type="file" multiple style={{ display: 'none' }}
+             webkitdirectory="true" directory="true" />
           <input ref={dirInputRef} type="file" multiple style={{ display: 'none' }} />
         </div>
       </div>
