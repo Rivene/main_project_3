@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from app.core.db import get_db
-from app.models.models import AppUser
+from app.models.user_model import AppUser
 from app.services.capcha import captcha_store
 import time, bcrypt
 from datetime import datetime
