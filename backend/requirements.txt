@@ -1,0 +1,11 @@
+fastapi==0.115.0
+uvicorn==0.30.6
+pydantic==2.9.2
+python-multipart==0.0.9
+pytesseract==0.3.13
+pillow==10.4.0
+PyMuPDF==1.24.10
+requests==2.32.3
+psutil==6.0.0
+python-dotenv==1.0.1      # ✅ .env 지원
+tqdm==4.66.4              # ✅ (선택) ZIP 처리시 진행률 표시
