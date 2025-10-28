@@ -2,9 +2,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from user.db import get_db
-from user.models import AppUser
-from user.capcha import captcha_store
+from app.core.db import get_db
+from app.models.models import AppUser
+from app.services.capcha import captcha_store
 import time
 import bcrypt
 import jwt

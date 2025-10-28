@@ -16,10 +16,10 @@ load_dotenv()
 # ✅ 비동기 친화: 동기 함수 워커 스레드로
 import anyio
 
-from services.ocr import ocr_funnel_extract, batch_ocr_zip
-from services.llm import summarize_and_categorize
-from utils.version import get_version
-from utils.telemetry import Telemetry, PerfRecorder
+from app.services.ocr import ocr_funnel_extract, batch_ocr_zip
+from app.services.llm import summarize_and_categorize
+from app.utils.version import get_version
+from app.utils.telemetry import Telemetry, PerfRecorder
 
 logging.basicConfig(
     level=logging.INFO,
@@ -278,11 +278,11 @@ async def finalize_session(sid: str, is_zip: bool = Form(True)):
         })
         return {"doc_id": doc_id, "pages": pages, "summary": summary}
     
-from user import capcha
+from app.services import capcha
 app.include_router(capcha.router)
 
-from user import signup
+from app.services import signup
 app.include_router(signup.router)
 
-from user import login
+from app.services import login
 app.include_router(login.router)
