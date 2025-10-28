@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 const KAKAO_CLIENT_ID =
   import.meta.env.VITE_KAKAO_REST_KEY ||
@@ -16,6 +16,7 @@ const GOOGLE_REDIRECT =
 
 export default function LoginPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const [isAdmin] = useState(0);
   const [loginId, setLoginId] = useState("");
@@ -31,12 +32,20 @@ export default function LoginPage() {
   const idRef = useRef(null);
   const pwRef = useRef(null);
 
-  const redirectParam = searchParams.get("redirect") || "";
+  const redirectParam = searchParams.get("redirect") || "/";
+
+  // ✅ 로그인 되어 있으면 바로 홈으로 리디렉트
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      navigate("/");
+    }
+  }, [navigate]);
 
   // ✅ 백엔드에서 CAPTCHA 불러오기
   const fetchCaptcha = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/captcha`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/captcha/`);
       if (!res.ok) throw new Error("보안문자 요청 실패");
       const data = await res.json();
       setCaptchaId(data.captcha_id);
@@ -82,12 +91,12 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "로그인 실패");
 
-      // ✅ JWT 저장
+      // ✅ JWT & 유저 정보 저장
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
       alert("로그인 성공!");
-      window.location.href = redirectParam || "/"; // 업로드 홈 유지
+      navigate(redirectParam || "/"); // ✅ useNavigate로 안전하게 이동
     } catch (err) {
       alert(err.message || "로그인 실패");
       fetchCaptcha(); // 실패 시 CAPTCHA 갱신
@@ -200,7 +209,7 @@ export default function LoginPage() {
               onChange={(e) => setMemberPw(e.target.value)}
             />
 
-            {/* ✅ 백엔드 CAPTCHA */}
+            {/* ✅ CAPTCHA */}
             <div className="flex items-start flex-wrap gap-2 mb-4">
               <div className="flex flex-col items-start">
                 <div

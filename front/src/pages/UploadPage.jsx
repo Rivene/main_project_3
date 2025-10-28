@@ -43,6 +43,33 @@ function inferDefaultTitle(filename) {
 export default function UploadPage() {
 
   const navigate = useNavigate();
+
+  // ✅ 로그인 상태 관리 추가
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [nickname, setNickname] = useState("");
+
+  // ✅ localStorage에서 로그인 상태 복원
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    if (token && user?.name) {
+      setIsLoggedIn(true);
+      setNickname(user.name);
+    } else {
+      setIsLoggedIn(false);
+      setNickname("");
+    }
+  }, []);
+
+  // ✅ 로그아웃 로직 추가
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setIsLoggedIn(false);
+    setNickname("");
+    navigate("/member/login");
+  };
+
   // 업로드 아이템 목록
   const [items, setItems] = useState([]); // {id, file, status, progress, error, controller, result, categoryName, title}
 
@@ -88,14 +115,10 @@ export default function UploadPage() {
   };
 
   // 파일 목록에 추가
-  // UploadPage.jsx 안에 있는 addFiles를 이걸로 교체
   const addFiles = useCallback(async (files) => {
     if (!files?.length) return;
 
-    // FileList일 수도 있고 배열일 수도 있으니까 통일
     const arr = Array.from(files);
-
-    // expanded: zip 풀린 결과까지 포함한 최종 파일 배열
     const expanded = [];
 
     for (const file of arr) {
@@ -103,27 +126,18 @@ export default function UploadPage() {
       const ext = "." + (lowerName.split(".").pop() || "").toLowerCase();
 
       if (ext === ".zip") {
-        // zip이면 내부에 있는 허용된 파일들만 뽑아서 push
         try {
-          const innerFiles = await extractFromZip(file); 
-          // zip 안에 pdf, hwp, docx 등등이 있으면 그걸 그대로 expanded에 추가
+          const innerFiles = await extractFromZip(file);
           expanded.push(...innerFiles);
         } catch (err) {
           console.error("zip 해제 실패:", err);
         }
       } else {
-        // zip이 아니라면 그냥 통과
         expanded.push(file);
       }
     }
 
-    // 이제 expanded에는:
-    // - 일반 파일들
-    // - zip 내부에서 풀린 파일들 (zip 자체는 기본적으로 안 넣음)
-    // 들이 들어있다.
-
     setItems((prev) => {
-      // prev에 이미 있는 파일과 중복 안 넣도록 중복키 세트
       const seenPrev = new Set(
         prev.map((it) => {
           const f = it.file || {};
@@ -135,19 +149,13 @@ export default function UploadPage() {
       const toAdd = [];
 
       for (const file of expanded) {
-        // 상대경로 (폴더 업로드/zip 내부 경로에서 옴)
         const rel = file.webkitRelativePath || file._relPath || "";
         const key = `${rel}::${file.name}:${file.size}:${file.lastModified || 0}`;
         if (seenPrev.has(key)) continue;
 
-        // 유효성 검사 (확장자/사이즈)
         const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
-        if (!ACCEPT_EXT.includes(ext)) {
-          // 지원 안 하는 형식은 스킵
-          continue;
-        }
+        if (!ACCEPT_EXT.includes(ext)) continue;
         if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-          // 너무 큰 파일은 에러 상태로 넣어주자 (사용자가 보이긴 해야 하니까)
           toAdd.push({
             id: crypto.randomUUID(),
             file,
@@ -162,11 +170,10 @@ export default function UploadPage() {
           continue;
         }
 
-        // 정상 케이스
         toAdd.push({
           id: crypto.randomUUID(),
           file,
-          status: "idle",      // 아직 서버 전송 안 함
+          status: "idle",
           progress: 0,
           error: null,
           controller: null,
@@ -309,18 +316,15 @@ export default function UploadPage() {
   );
 
   // 총 파일 계산
-  const totalFileCount = useMemo(
-    () => items.length,
-    [items]
-  );
+  const totalFileCount = useMemo(() => items.length, [items]);
 
-  // 업로드/처리(status === "done") 끝난 항목만 추출
+  // 업로드 완료 항목
   const doneItems = useMemo(
     () => items.filter((it) => it.status === "done" && it.result),
     [items]
   );
 
-  // ZIP 다운로드 버튼 클릭 핸들러
+  // ZIP 다운로드
   const handleDownloadAllZip = async () => {
     if (doneItems.length === 0) {
       alert("완료된 문서가 없습니다.");
@@ -333,8 +337,7 @@ export default function UploadPage() {
   const allCategories = useMemo(() => {
     const s = new Set();
     for (const it of items) {
-      if (it.status !== "done") continue; 
-
+      if (it.status !== "done") continue;
       if (it.categoryName) s.add(it.categoryName);
       (it?.result?.tags || []).forEach((t) => s.add(t));
     }
@@ -348,14 +351,8 @@ export default function UploadPage() {
       return n;
     });
 
-  const clearFilters = () => {
-    setSearchQuery("");
-    setSelectedCats(new Set());
-  };
-
   const normalized = (v) => String(v || "").toLowerCase();
 
-  // 검색/필터된 아이템
   const filteredItems = useMemo(() => {
     const q = normalized(searchQuery);
     const need = Array.from(selectedCats);
@@ -379,11 +376,10 @@ export default function UploadPage() {
   }, [items, searchQuery, selectedCats]);
 
   const onItemTagClick = (tag) => {
-    setActiveTab("mypage"); // 검색/마이페이지 탭으로 넘기는 흐름
+    setActiveTab("mypage");
     toggleCat(tag);
   };
 
-  // 파일 input change 핸들링
   useEffect(() => {
     const input = inputRef.current;
     const dir = dirInputRef.current;
@@ -403,10 +399,9 @@ export default function UploadPage() {
     };
   }, [addFiles]);
 
-  // 페이지 레이아웃
+  // ✅ Sidebar에 로그인 상태 반영
   return (
     <div className="flex">
-      {/* 사이드바 */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -415,14 +410,12 @@ export default function UploadPage() {
         toggleCat={toggleCat}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
-        isLoggedIn={true}         // 나중에 실제 값으로
-        userNickname={"현우"}     // 나중에 실제 값으로
-        onLogout={() => {}}       // 나중에 실제 로직으로
+        isLoggedIn={isLoggedIn}
+        userNickname={nickname}
+        onLogout={handleLogout}
       />
 
-      {/* 메인 영역 */}
       <main className="flex-1 min-h-screen bg-[#f8fafc] p-6">
-        {/* 헤더 */}
         <header className="mb-6 flex flex-col gap-2">
           <h1 className="text-xl font-semibold text-gray-900">
             {activeTab === "home"
@@ -435,7 +428,6 @@ export default function UploadPage() {
           {activeTab === "home" && (
             <div className="text-sm text-gray-600 flex flex-wrap items-center gap-2">
               <span className="text-gray-500">허용 확장자:</span>
-
               <span className="inline-flex items-center rounded-md bg-gray-100 text-gray-800 text-[11px] font-medium px-2 py-0.5">
                 pdf
               </span>
@@ -462,7 +454,6 @@ export default function UploadPage() {
           )}
         </header>
 
-        {/* 탭별 내용 */}
         {activeTab === "home" && (
           <UploadHome
             items={items}
@@ -483,7 +474,7 @@ export default function UploadPage() {
         {activeTab === "mypage" && (
           <MyPage
             currentUser={{
-              nickname: "강현우",
+              nickname: nickname || "사용자",
               phone: "010-0000-0000",
               email: "email@abc.com",
               isAdmin: "True",

@@ -2,7 +2,6 @@ import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Home,
-  User,
   FolderOpen,
   Settings,
   LogIn,
@@ -50,12 +49,10 @@ export default function Sidebar({
       if (t.length > 24) return false;
       return true;
     };
-    return Array.from(new Set(categories.filter(isCategoryLike))).slice(
-      0,
-      30
-    );
+    return Array.from(new Set(categories.filter(isCategoryLike))).slice(0, 30);
   }, [categories]);
 
+  // 로그아웃 처리
   const handleLogout = () => {
     onLogout?.();
     navigate("/");
@@ -65,8 +62,7 @@ export default function Sidebar({
     "grid grid-cols-[28px_1fr] items-center gap-2 w-full text-left rounded-xl border border-transparent px-3 py-2 text-[14px] font-medium cursor-pointer transition-colors";
   const navBtnActive =
     "bg-[rgba(110,168,254,0.15)] border-[rgba(110,168,254,0.4)] text-gray-900";
-  const navBtnHover =
-    "hover:bg-gray-100 hover:text-gray-900 text-gray-700";
+  const navBtnHover = "hover:bg-gray-100 hover:text-gray-900 text-gray-700";
 
   return (
     <aside
